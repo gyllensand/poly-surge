@@ -1,5 +1,4 @@
 export const COLORS = [
-  "#ffffff",
   "#dc202e",
   "#2d338b",
   "#76306b",
@@ -16,9 +15,18 @@ export const COLORS = [
   "#249582",
 ];
 
-export const BG_COLORS = ["#000000", "#000000", "#111111", "#040b2d"];
+export const DARK_COLORS = [...COLORS, "#ffffff"];
 
-export const LIGHT_BG_COLORS = ["#ffffff", "#fff6d1"];
+export const LIGHT_COLORS = [...COLORS, "#000000"];
+
+export const DARK_BG_COLORS = ["#000000", "#000000", "#111111", "#040b2d"];
+
+export const LIGHT_BG_COLORS = ["#ffffff", "#fff6d1", "#fff6d1", "#dbd8d0"];
+
+export enum Theme {
+  Dark = "dark",
+  Light = "light",
+}
 
 export enum Type {
   BackToBack = 0,

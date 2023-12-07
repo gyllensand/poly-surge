@@ -1,8 +1,18 @@
 import { Center, OrbitControls } from "@react-three/drei";
-import { useFrame, useThree } from "@react-three/fiber";
+import { useThree } from "@react-three/fiber";
 import { RefObject, useCallback, useEffect } from "react";
 import { createNoise2D } from "simplex-noise";
-import { COLORS, BG_COLORS, Type, ColorMode, Direction } from "./constants";
+import {
+  COLORS,
+  DARK_BG_COLORS,
+  Type,
+  ColorMode,
+  Direction,
+  LIGHT_BG_COLORS,
+  Theme,
+  DARK_COLORS,
+  LIGHT_COLORS,
+} from "./constants";
 import {
   pickRandom,
   pickRandomDecimalFromInterval,
@@ -12,7 +22,7 @@ import {
   interpolateColors,
 } from "./utils";
 import Line from "./Line";
-import { useSprings, useSpring } from "@react-spring/three";
+import { useSprings } from "@react-spring/three";
 import { Bloom, EffectComposer } from "@react-three/postprocessing";
 import { KernelSize } from "postprocessing";
 
@@ -26,10 +36,20 @@ export const colorMode = pickRandom([
   ColorMode.Gradient,
   ColorMode.EveryOther,
 ]);
+const colorTheme = pickRandom([
+  Theme.Dark,
+  Theme.Dark,
+  Theme.Dark,
+  Theme.Dark,
+  Theme.Dark,
+  Theme.Light,
+]);
 const clonedLineLengths = pickRandomBoolean();
 const clonedLineCount = pickRandomBoolean();
 const clonedSimplex = pickRandomBoolean();
-const bgColor = pickRandom(BG_COLORS);
+const bgColor = pickRandom(
+  colorTheme === Theme.Dark ? DARK_BG_COLORS : LIGHT_BG_COLORS
+);
 
 const getLeftGroupPos = () => {
   switch (type) {
@@ -69,8 +89,12 @@ console.log("LEFT GROUP POSITION", leftGroupPos);
 console.log("CLONED LINE LENGTHS", clonedLineLengths);
 console.log("CLONED LINE COUNT", clonedLineCount);
 
-const primaryColor = pickRandom(COLORS);
-const secondaryColor = pickRandom(COLORS);
+const primaryColor = pickRandom(
+  colorTheme === Theme.Dark ? DARK_COLORS : LIGHT_COLORS
+);
+const secondaryColor = pickRandom(
+  colorTheme === Theme.Dark ? DARK_COLORS : LIGHT_COLORS
+);
 const colorSeparator = pickRandomIntFromInterval(
   0,
   (leftLineCount + rightLineCount) / 2
@@ -82,38 +106,42 @@ const colorGradient = interpolateColors(
   leftLineCount > rightLineCount ? leftLineCount : rightLineCount
 );
 
-const getColor = (index: number, direction: Direction) => {
+const getColor = (
+  index: number,
+  direction: Direction,
+  primColor: string,
+  seconColor: string,
+  gradient: string[]
+) => {
   switch (colorMode) {
     case ColorMode.PlainDiff:
       if (direction === Direction.Left) {
-        return primaryColor;
+        return primColor;
       } else {
-        return secondaryColor;
+        return seconColor;
       }
 
     case ColorMode.Separated:
       if (index < colorSeparator) {
-        return primaryColor;
+        return primColor;
       } else {
-        return secondaryColor;
+        return seconColor;
       }
 
     case ColorMode.Gradient:
-      return colorGradient[index];
+      return gradient[index];
 
     case ColorMode.EveryOther:
       if (index % 2 === 0) {
-        return primaryColor;
+        return primColor;
       } else {
-        return secondaryColor;
+        return seconColor;
       }
 
     default:
-      return primaryColor;
+      return primColor;
   }
 };
-
-const lineHeight = pickRandomDecimalFromInterval(0.03, 0.1, 3);
 
 const getLines = (
   direction: Direction,
@@ -126,16 +154,31 @@ const getLines = (
 
     return {
       length:
-        lineLength +
-        3 * simplex(index / 20, 0) +
-        0.2 * simplex(index / 10, 0) +
-        0.1 * simplex(index / 8, 0),
-      color: getColor(i, direction),
+        type === Type.BackToBack
+          ? Math.abs(
+              lineLength +
+                3 * simplex(index / 20, 0) +
+                0.2 * simplex(index / 10, 0) +
+                0.1 * simplex(index / 8, 0)
+            )
+          : lineLength +
+            3 * simplex(index / 20, 0) +
+            0.2 * simplex(index / 10, 0) +
+            0.1 * simplex(index / 8, 0),
+      color: getColor(
+        i,
+        direction,
+        primaryColor,
+        secondaryColor,
+        colorGradient
+      ),
     };
   });
 };
 
-const leftSimplex = createNoise2D();
+declare const $fx: any;
+
+const leftSimplex = createNoise2D($fx.rand);
 const leftLines = getLines(
   Direction.Left,
   leftLineCount,
@@ -143,15 +186,13 @@ const leftLines = getLines(
   leftSimplex
 );
 
-const rightSimplex = createNoise2D();
+const rightSimplex = createNoise2D($fx.rand);
 const rightLines = getLines(
   Direction.Right,
   rightLineCount,
   rightLineLength,
   clonedSimplex ? leftSimplex : rightSimplex
 );
-
-declare const $fx: any;
 
 $fx.features({});
 
@@ -164,6 +205,7 @@ const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
     leftLineCount,
     (i) => ({
       lineLength: leftLines[i].length,
+      color: leftLines[i].color,
     })
   );
 
@@ -171,6 +213,7 @@ const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
     rightLineCount,
     (i) => ({
       lineLength: rightLines[i].length,
+      color: rightLines[i].color,
     })
   );
 
@@ -188,17 +231,47 @@ const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
         Direction.Right,
         rightLineCount,
         rightLineLength,
-        newRightSimplex
+        clonedLineLengths && clonedLineCount ? newLeftSimplex : newRightSimplex
       );
+
+      const newPrimaryColor = pickRandom(
+        colorTheme === Theme.Dark ? DARK_COLORS : LIGHT_COLORS,
+        Math.random
+      );
+      const newSecondaryColor = pickRandom(
+        colorTheme === Theme.Dark ? DARK_COLORS : LIGHT_COLORS,
+        Math.random
+      );
+      const newColorGradient = interpolateColors(
+        newPrimaryColor,
+        newSecondaryColor,
+        leftLineCount > rightLineCount ? leftLineCount : rightLineCount
+      );
+
+      const reversed = pickRandom([false, true], Math.random);
 
       setLeftLineSprings.start((i) => ({
         lineLength: newLeftLines[i].length,
-        delay: i * 10,
+        color: getColor(
+          i,
+          Direction.Left,
+          newPrimaryColor,
+          newSecondaryColor,
+          newColorGradient
+        ),
+        delay: reversed ? leftLineCount * 10 - i * 10 : i * 10,
         config: { mass: 1, tension: 200, friction: 25 },
       }));
       setRightLineSprings.start((i) => ({
         lineLength: newRightLines[i].length,
-        delay: i * 10,
+        color: getColor(
+          i,
+          Direction.Right,
+          newPrimaryColor,
+          newSecondaryColor,
+          newColorGradient
+        ),
+        delay: reversed ? rightLineCount * 10 - i * 10 : i * 10,
         config: { mass: 1, tension: 200, friction: 25 },
       }));
     },
@@ -228,15 +301,21 @@ const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
       <color attach="background" args={[bgColor]} />
       <OrbitControls enabled={true} />
       <ambientLight />
-      <Center rotation={[0, 0, rotation]}>
+      <Center
+        rotation={[0, 0, rotation]}
+        scale={[
+          getSizeByAspect(1, aspect),
+          getSizeByAspect(1, aspect),
+          getSizeByAspect(1, aspect),
+        ]}
+      >
         <group position={[leftGroupPos, 0, 0]}>
           {leftLines.map((o, i) => (
             <Line
               key={i}
               index={i}
-              data={o}
-              height={lineHeight}
               length={leftLineSprings[i].lineLength}
+              color={leftLineSprings[i].color}
               direction={Direction.Left}
             />
           ))}
@@ -246,9 +325,8 @@ const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
             <Line
               key={i}
               index={i}
-              data={o}
-              height={lineHeight}
               length={rightLineSprings[i].lineLength}
+              color={rightLineSprings[i].color}
               direction={Direction.Right}
             />
           ))}
