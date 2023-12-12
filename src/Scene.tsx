@@ -1,9 +1,14 @@
 import { Center, OrbitControls } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
-import { RefObject, useCallback, useEffect } from "react";
+import {
+  MutableRefObject,
+  RefObject,
+  useCallback,
+  useEffect,
+  useRef,
+} from "react";
 import { createNoise2D } from "simplex-noise";
 import {
-  COLORS,
   DARK_BG_COLORS,
   Type,
   ColorMode,
@@ -12,6 +17,7 @@ import {
   Theme,
   DARK_COLORS,
   LIGHT_COLORS,
+  SCALES,
 } from "./constants";
 import {
   pickRandom,
@@ -23,8 +29,8 @@ import {
 } from "./utils";
 import Line from "./Line";
 import { useSprings } from "@react-spring/three";
-import { Bloom, EffectComposer } from "@react-three/postprocessing";
-import { KernelSize } from "postprocessing";
+import { start } from "tone";
+import { BASS, MELODY, PLUCKS, Sample } from "./App";
 
 export const rotation = pickRandom([0, Math.PI / 2]);
 export const density = pickRandomDecimalFromInterval(0.1, 0.3, 2);
@@ -83,6 +89,11 @@ export const lineDepth = pickRandom([
   pickRandomDecimalFromInterval(0.01, 0.05),
 ]);
 
+const longestLine =
+  leftLineCount >= rightLineCount
+    ? { direction: Direction.Left, count: leftLineCount }
+    : { direction: Direction.Right, count: rightLineCount };
+
 console.log("TYPE", Type[type]);
 console.log("COLOR MODE", ColorMode[colorMode]);
 console.log("LEFT GROUP POSITION", leftGroupPos);
@@ -103,9 +114,10 @@ const colorSeparator = pickRandomIntFromInterval(
 const colorGradient = interpolateColors(
   primaryColor,
   secondaryColor,
-  leftLineCount > rightLineCount ? leftLineCount : rightLineCount
+  longestLine.count
 );
-
+console.log("PRIM", primaryColor);
+console.log("SECO", secondaryColor);
 const getColor = (
   index: number,
   direction: Direction,
@@ -194,12 +206,19 @@ const rightLines = getLines(
   clonedSimplex ? leftSimplex : rightSimplex
 );
 
+const dummyAudioArray = new Array(longestLine.count)
+  .fill(null)
+  .map(() => ({ value: Math.random() }));
+
 $fx.features({});
 
 const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
   const { aspect } = useThree((state) => ({
     aspect: state.viewport.aspect,
   }));
+
+  const toneInitialized = useRef(false);
+  const lastPlayedScale = useRef<number>();
 
   const [leftLineSprings, setLeftLineSprings] = useSprings(
     leftLineCount,
@@ -215,6 +234,64 @@ const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
       lineLength: rightLines[i].length,
       color: rightLines[i].color,
     })
+  );
+
+  const [audioSprings, setAudioSprings] = useSprings(
+    dummyAudioArray.length,
+    (i) => ({ value: dummyAudioArray[i].value })
+  );
+
+  useEffect(() => {
+    PLUCKS.forEach((hit) => {
+      hit.sampler.toDestination();
+    });
+    MELODY.forEach((hit) => {
+      hit.sampler.toDestination();
+    });
+    BASS.forEach((hit) => {
+      hit.sampler.toDestination();
+    });
+  }, []);
+
+  const currentLinePluckIndex = useRef(0);
+  const currentScalePluckIndex = useRef(0);
+  const currentLineMelodyIndex = useRef(0);
+  const currentScaleMelodyIndex = useRef(0);
+  const currentLineBassIndex = useRef(0);
+  const currentScaleBassIndex = useRef(0);
+
+  const triggerHits = useCallback(
+    (
+      currentLineIndex: MutableRefObject<number>,
+      currentScaleIndex: MutableRefObject<number>,
+      audioArray: Sample[],
+      currentScale: {
+        index: number;
+        bass: number[];
+        sequence: number[];
+      },
+      stepFreq: number
+    ) => {
+      currentLineIndex.current++;
+
+      if (
+        currentLineIndex.current % stepFreq !== 0 &&
+        currentLineIndex.current !== 1
+      ) {
+        return;
+      }
+
+      if (currentScaleIndex.current > currentScale.sequence.length - 1) {
+        currentScaleIndex.current = 1;
+      }
+
+      audioArray[
+        currentScale.sequence[currentScaleIndex.current]
+      ].sampler.triggerAttack("C#-1");
+
+      currentScaleIndex.current++;
+    },
+    []
   );
 
   const onPointerDown = useCallback(
@@ -245,7 +322,7 @@ const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
       const newColorGradient = interpolateColors(
         newPrimaryColor,
         newSecondaryColor,
-        leftLineCount > rightLineCount ? leftLineCount : rightLineCount
+        longestLine.count
       );
 
       const reversed = pickRandom([false, true], Math.random);
@@ -274,8 +351,64 @@ const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
         delay: reversed ? rightLineCount * 10 - i * 10 : i * 10,
         config: { mass: 1, tension: 200, friction: 25 },
       }));
+
+      if (!toneInitialized.current) {
+        await start();
+        toneInitialized.current = true;
+      }
+
+      const availableScales = SCALES.filter(
+        ({ index }) => index !== lastPlayedScale.current
+      );
+      const currentScale = pickRandom(availableScales, Math.random);
+      lastPlayedScale.current = currentScale.index;
+
+      currentLinePluckIndex.current = 0;
+      currentScalePluckIndex.current = 0;
+      currentLineMelodyIndex.current = 0;
+      currentScaleMelodyIndex.current = 0;
+      currentLineBassIndex.current = 0;
+      currentScaleBassIndex.current = 0;
+
+      const triggerMelody = pickRandom([true, false], Math.random);
+      const triggerBass = pickRandom([true, false], Math.random);
+
+      setAudioSprings.stop().start((i) => ({
+        value: Math.random(),
+        delay: reversed ? longestLine.count * 10 - i * 10 : i * 10,
+        config: { mass: 1, tension: 200, friction: 25 },
+        onStart: () => {
+          triggerHits(
+            currentLinePluckIndex,
+            currentScalePluckIndex,
+            PLUCKS,
+            currentScale,
+            10
+          );
+
+          if (triggerMelody) {
+            triggerHits(
+              currentLineMelodyIndex,
+              currentScaleMelodyIndex,
+              MELODY,
+              { ...currentScale, sequence: currentScale.melody },
+              40
+            );
+          }
+
+          if (triggerBass) {
+            triggerHits(
+              currentLineBassIndex,
+              currentScaleBassIndex,
+              BASS,
+              { ...currentScale, sequence: currentScale.bass },
+              40
+            );
+          }
+        },
+      }));
     },
-    [setLeftLineSprings, setRightLineSprings]
+    [setLeftLineSprings, setRightLineSprings, setAudioSprings, triggerHits]
   );
 
   const onPointerUp = useCallback(() => {}, []);
@@ -332,14 +465,6 @@ const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
           ))}
         </group>
       </Center>
-      {/* <EffectComposer>
-        <Bloom
-          kernelSize={KernelSize.HUGE}
-          luminanceThreshold={0}
-          luminanceSmoothing={0.4}
-          intensity={0.6}
-        />
-      </EffectComposer> */}
     </>
   );
 };
