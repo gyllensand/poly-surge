@@ -159,24 +159,34 @@ const getLines = (
   direction: Direction,
   count: number,
   lineLength: number,
-  simplex: (x: number, y: number) => number
+  simplex: (x: number, y: number) => number,
+  rndFunction = $fx.rand
 ) => {
+  const defaultLength = pickRandom(
+    [...new Array(9).fill(null).map(() => true), false],
+    rndFunction
+  );
+
   return new Array(count).fill(null).map((o, i) => {
     const index = i === 0 ? 0.5 : i;
 
+    const simplexLength =
+      type === Type.BackToBack
+        ? Math.abs(
+            lineLength +
+              3 * simplex(index / 20, 0) +
+              0.2 * simplex(index / 10, 0) +
+              0.1 * simplex(index / 8, 0)
+          )
+        : lineLength +
+          3 * simplex(index / 20, 0) +
+          0.2 * simplex(index / 10, 0) +
+          0.1 * simplex(index / 8, 0);
+
     return {
-      length:
-        type === Type.BackToBack
-          ? Math.abs(
-              lineLength +
-                3 * simplex(index / 20, 0) +
-                0.2 * simplex(index / 10, 0) +
-                0.1 * simplex(index / 8, 0)
-            )
-          : lineLength +
-            3 * simplex(index / 20, 0) +
-            0.2 * simplex(index / 10, 0) +
-            0.1 * simplex(index / 8, 0),
+      length: defaultLength
+        ? simplexLength
+        : pickRandomDecimalFromInterval(1, 4, 3, rndFunction),
       color: getColor(
         i,
         direction,
@@ -236,6 +246,7 @@ const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
     })
   );
 
+  // eslint-disable-next-line
   const [audioSprings, setAudioSprings] = useSprings(
     dummyAudioArray.length,
     (i) => ({ value: dummyAudioArray[i].value })
@@ -294,124 +305,134 @@ const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
     []
   );
 
-  const onPointerDown = useCallback(
-    async (e: PointerEvent) => {
-      const newLeftSimplex = createNoise2D();
-      const newLeftLines = getLines(
-        Direction.Left,
-        leftLineCount,
-        leftLineLength,
-        newLeftSimplex
-      );
-      const newRightSimplex = createNoise2D();
-      const newRightLines = getLines(
-        Direction.Right,
-        rightLineCount,
-        rightLineLength,
-        clonedLineLengths && clonedLineCount ? newLeftSimplex : newRightSimplex
-      );
+  const triggerClick = useCallback(() => {
+    const newLeftSimplex = createNoise2D();
+    const newLeftLines = getLines(
+      Direction.Left,
+      leftLineCount,
+      leftLineLength,
+      newLeftSimplex,
+      Math.random
+    );
+    const newRightSimplex = createNoise2D();
+    const newRightLines = getLines(
+      Direction.Right,
+      rightLineCount,
+      rightLineLength,
+      clonedLineLengths && clonedLineCount ? newLeftSimplex : newRightSimplex,
+      Math.random
+    );
 
-      const newPrimaryColor = pickRandom(
-        colorTheme === Theme.Dark ? DARK_COLORS : LIGHT_COLORS,
-        Math.random
-      );
-      const newSecondaryColor = pickRandom(
-        colorTheme === Theme.Dark ? DARK_COLORS : LIGHT_COLORS,
-        Math.random
-      );
-      const newColorGradient = interpolateColors(
+    const newPrimaryColor = pickRandom(
+      colorTheme === Theme.Dark ? DARK_COLORS : LIGHT_COLORS,
+      Math.random
+    );
+    const newSecondaryColor = pickRandom(
+      colorTheme === Theme.Dark ? DARK_COLORS : LIGHT_COLORS,
+      Math.random
+    );
+    const newColorGradient = interpolateColors(
+      newPrimaryColor,
+      newSecondaryColor,
+      longestLine.count
+    );
+
+    const reversed = pickRandom([false, true], Math.random);
+
+    setLeftLineSprings.start((i) => ({
+      lineLength: newLeftLines[i].length,
+      color: getColor(
+        i,
+        Direction.Left,
         newPrimaryColor,
         newSecondaryColor,
-        longestLine.count
-      );
+        newColorGradient
+      ),
+      delay: reversed ? leftLineCount * 10 - i * 10 : i * 10,
+      config: { mass: 1, tension: 200, friction: 25 },
+    }));
+    setRightLineSprings.start((i) => ({
+      lineLength: newRightLines[i].length,
+      color: getColor(
+        i,
+        Direction.Right,
+        newPrimaryColor,
+        newSecondaryColor,
+        newColorGradient
+      ),
+      delay: reversed ? rightLineCount * 10 - i * 10 : i * 10,
+      config: { mass: 1, tension: 200, friction: 25 },
+    }));
 
-      const reversed = pickRandom([false, true], Math.random);
+    const availableScales = SCALES.filter(
+      ({ index }) => index !== lastPlayedScale.current
+    );
+    const currentScale = pickRandom(availableScales, Math.random);
+    lastPlayedScale.current = currentScale.index;
 
-      setLeftLineSprings.start((i) => ({
-        lineLength: newLeftLines[i].length,
-        color: getColor(
-          i,
-          Direction.Left,
-          newPrimaryColor,
-          newSecondaryColor,
-          newColorGradient
-        ),
-        delay: reversed ? leftLineCount * 10 - i * 10 : i * 10,
-        config: { mass: 1, tension: 200, friction: 25 },
-      }));
-      setRightLineSprings.start((i) => ({
-        lineLength: newRightLines[i].length,
-        color: getColor(
-          i,
-          Direction.Right,
-          newPrimaryColor,
-          newSecondaryColor,
-          newColorGradient
-        ),
-        delay: reversed ? rightLineCount * 10 - i * 10 : i * 10,
-        config: { mass: 1, tension: 200, friction: 25 },
-      }));
+    currentLinePluckIndex.current = 0;
+    currentScalePluckIndex.current = 0;
+    currentLineMelodyIndex.current = 0;
+    currentScaleMelodyIndex.current = 0;
+    currentLineBassIndex.current = 0;
+    currentScaleBassIndex.current = 0;
+
+    const triggerMelody = pickRandom([true, false], Math.random);
+    const triggerBass = pickRandom([true, false], Math.random);
+
+    setAudioSprings.stop().start((i) => ({
+      value: Math.random(),
+      delay: reversed ? longestLine.count * 10 - i * 10 : i * 10,
+      config: { mass: 1, tension: 200, friction: 25 },
+      onStart: () => {
+        triggerHits(
+          currentLinePluckIndex,
+          currentScalePluckIndex,
+          PLUCKS,
+          currentScale,
+          10
+        );
+
+        if (triggerMelody) {
+          triggerHits(
+            currentLineMelodyIndex,
+            currentScaleMelodyIndex,
+            MELODY,
+            { ...currentScale, sequence: currentScale.melody },
+            40
+          );
+        }
+
+        if (triggerBass) {
+          triggerHits(
+            currentLineBassIndex,
+            currentScaleBassIndex,
+            BASS,
+            { ...currentScale, sequence: currentScale.bass },
+            40
+          );
+        }
+      },
+    }));
+  }, [setLeftLineSprings, setRightLineSprings, setAudioSprings, triggerHits]);
+
+  const onPointerDown = useCallback(
+    async (e: PointerEvent) => {
+      e.preventDefault();
 
       if (!toneInitialized.current) {
         await start();
         toneInitialized.current = true;
+        setTimeout(() => {
+          triggerClick();
+        }, 100);
+        return;
       }
 
-      const availableScales = SCALES.filter(
-        ({ index }) => index !== lastPlayedScale.current
-      );
-      const currentScale = pickRandom(availableScales, Math.random);
-      lastPlayedScale.current = currentScale.index;
-
-      currentLinePluckIndex.current = 0;
-      currentScalePluckIndex.current = 0;
-      currentLineMelodyIndex.current = 0;
-      currentScaleMelodyIndex.current = 0;
-      currentLineBassIndex.current = 0;
-      currentScaleBassIndex.current = 0;
-
-      const triggerMelody = pickRandom([true, false], Math.random);
-      const triggerBass = pickRandom([true, false], Math.random);
-
-      setAudioSprings.stop().start((i) => ({
-        value: Math.random(),
-        delay: reversed ? longestLine.count * 10 - i * 10 : i * 10,
-        config: { mass: 1, tension: 200, friction: 25 },
-        onStart: () => {
-          triggerHits(
-            currentLinePluckIndex,
-            currentScalePluckIndex,
-            PLUCKS,
-            currentScale,
-            10
-          );
-
-          if (triggerMelody) {
-            triggerHits(
-              currentLineMelodyIndex,
-              currentScaleMelodyIndex,
-              MELODY,
-              { ...currentScale, sequence: currentScale.melody },
-              40
-            );
-          }
-
-          if (triggerBass) {
-            triggerHits(
-              currentLineBassIndex,
-              currentScaleBassIndex,
-              BASS,
-              { ...currentScale, sequence: currentScale.bass },
-              40
-            );
-          }
-        },
-      }));
+      triggerClick();
     },
-    [setLeftLineSprings, setRightLineSprings, setAudioSprings, triggerHits]
+    [triggerClick]
   );
-
-  const onPointerUp = useCallback(() => {}, []);
 
   useEffect(() => {
     const ref = canvasRef?.current;
@@ -421,13 +442,11 @@ const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
     }
 
     ref.addEventListener("pointerdown", onPointerDown);
-    ref.addEventListener("pointerup", onPointerUp);
 
     return () => {
       ref.removeEventListener("pointerdown", onPointerDown);
-      ref.removeEventListener("pointerup", onPointerUp);
     };
-  }, [onPointerUp, onPointerDown, canvasRef]);
+  }, [onPointerDown, canvasRef]);
 
   return (
     <>

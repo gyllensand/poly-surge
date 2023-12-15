@@ -389,11 +389,6 @@ export const BASS: Sample[] = [
   },
 ];
 
-export interface Sample {
-  index: number;
-  sampler: Sampler;
-}
-
 const App = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   return (

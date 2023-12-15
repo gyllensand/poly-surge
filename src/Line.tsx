@@ -41,15 +41,21 @@ const Line = ({
 }) => {
   const groupRef = useRef<Mesh>(null);
   const initialLength = useRef(length.get());
+  const initialHeight = useRef(getLength(length.get(), direction));
+  const initialPosition = useRef(getPositionX(length.get(), direction));
 
   useFrame(() => {
-    groupRef.current!.position.set(
+    if (!groupRef.current) {
+      return;
+    }
+
+    groupRef.current.position.set(
       getPositionX(length.get(), direction),
       index * density,
       0
     );
 
-    groupRef.current!.scale.set(
+    groupRef.current.scale.set(
       1,
       getLength(length.get(), direction) /
         getLength(initialLength.current, direction),
@@ -57,19 +63,19 @@ const Line = ({
     );
 
     // @ts-ignore
-    groupRef.current!.material.color = new Color(color.get());
+    groupRef.current.material.color = new Color(color.get());
   });
 
   return (
     <a.mesh
       ref={groupRef}
       rotation={[Math.PI / 2, 0, Math.PI / 2]}
-      position={[getPositionX(length.get(), direction), index * density, 0]}
+      position={[initialPosition.current, index * density, 0]}
     >
       <boxGeometry
-        args={[lineDepth, getLength(length.get(), direction), 0.03, 1, 1]}
+        args={[lineDepth, initialHeight.current, 0.03, 1, 1]}
       />
-      <a.meshBasicMaterial transparent />
+      <meshBasicMaterial transparent />
     </a.mesh>
   );
 };
