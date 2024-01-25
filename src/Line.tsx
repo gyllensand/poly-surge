@@ -32,17 +32,19 @@ const Line = ({
   index,
   direction,
   color,
-  length,
+  lineLength,
+  opacity,
 }: {
   direction: Direction;
   index: number;
-  length: SpringValue<number>;
+  lineLength: SpringValue<number>;
   color: SpringValue<string>;
+  opacity: SpringValue<number>;
 }) => {
   const groupRef = useRef<Mesh>(null);
-  const initialLength = useRef(length.get());
-  const initialHeight = useRef(getLength(length.get(), direction));
-  const initialPosition = useRef(getPositionX(length.get(), direction));
+  const initialLength = useRef(lineLength.get());
+  const initialHeight = useRef(getLength(lineLength.get(), direction));
+  const initialPosition = useRef(getPositionX(lineLength.get(), direction));
 
   useFrame(() => {
     if (!groupRef.current) {
@@ -50,14 +52,14 @@ const Line = ({
     }
 
     groupRef.current.position.set(
-      getPositionX(length.get(), direction),
+      getPositionX(lineLength.get(), direction),
       index * density,
       0
     );
 
     groupRef.current.scale.set(
       1,
-      getLength(length.get(), direction) /
+      getLength(lineLength.get(), direction) /
         getLength(initialLength.current, direction),
       1
     );
@@ -72,9 +74,7 @@ const Line = ({
       rotation={[Math.PI / 2, 0, Math.PI / 2]}
       position={[initialPosition.current, index * density, 0]}
     >
-      <boxGeometry
-        args={[lineDepth, initialHeight.current, 0.03, 1, 1]}
-      />
+      <boxGeometry args={[lineDepth, initialHeight.current, 0.05, 1, 1]} />
       <meshBasicMaterial transparent />
     </a.mesh>
   );

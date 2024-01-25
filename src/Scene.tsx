@@ -31,6 +31,8 @@ import Line from "./Line";
 import { useSprings } from "@react-spring/three";
 import { start } from "tone";
 import { BASS, MELODY, PLUCKS, Sample } from "./App";
+import { Bloom, EffectComposer } from "@react-three/postprocessing";
+import { KernelSize } from "postprocessing";
 
 export const rotation = pickRandom([0, Math.PI / 2]);
 export const density = pickRandomDecimalFromInterval(0.1, 0.3, 2);
@@ -94,12 +96,6 @@ const longestLine =
     ? { direction: Direction.Left, count: leftLineCount }
     : { direction: Direction.Right, count: rightLineCount };
 
-console.log("TYPE", Type[type]);
-console.log("COLOR MODE", ColorMode[colorMode]);
-console.log("LEFT GROUP POSITION", leftGroupPos);
-console.log("CLONED LINE LENGTHS", clonedLineLengths);
-console.log("CLONED LINE COUNT", clonedLineCount);
-
 const primaryColor = pickRandom(
   colorTheme === Theme.Dark ? DARK_COLORS : LIGHT_COLORS
 );
@@ -116,8 +112,7 @@ const colorGradient = interpolateColors(
   secondaryColor,
   longestLine.count
 );
-console.log("PRIM", primaryColor);
-console.log("SECO", secondaryColor);
+
 const getColor = (
   index: number,
   direction: Direction,
@@ -187,6 +182,11 @@ const getLines = (
       length: defaultLength
         ? simplexLength
         : pickRandomDecimalFromInterval(1, 4, 3, rndFunction),
+      opacity: Math.abs(
+        0.9091 * simplex(index / 20, 0) +
+          0.0606 * simplex(index / 10, 0) +
+          0.0303 * simplex(index / 8, 0)
+      ),
       color: getColor(
         i,
         direction,
@@ -199,6 +199,14 @@ const getLines = (
 };
 
 declare const $fx: any;
+
+$fx.features = () => ({
+  type,
+  colorMode,
+  primaryColor,
+  secondaryColor,
+  bgColor,
+});
 
 const leftSimplex = createNoise2D($fx.rand);
 const leftLines = getLines(
@@ -235,6 +243,7 @@ const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
     (i) => ({
       lineLength: leftLines[i].length,
       color: leftLines[i].color,
+      opacity: leftLines[i].opacity,
     })
   );
 
@@ -243,6 +252,7 @@ const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
     (i) => ({
       lineLength: rightLines[i].length,
       color: rightLines[i].color,
+      opacity: rightLines[i].opacity,
     })
   );
 
@@ -341,6 +351,7 @@ const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
 
     setLeftLineSprings.start((i) => ({
       lineLength: newLeftLines[i].length,
+      opacity: newLeftLines[i].opacity,
       color: getColor(
         i,
         Direction.Left,
@@ -353,6 +364,7 @@ const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
     }));
     setRightLineSprings.start((i) => ({
       lineLength: newRightLines[i].length,
+      opacity: newRightLines[i].opacity,
       color: getColor(
         i,
         Direction.Right,
@@ -451,7 +463,7 @@ const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
   return (
     <>
       <color attach="background" args={[bgColor]} />
-      <OrbitControls enabled={true} />
+      <OrbitControls enabled={false} />
       <ambientLight />
       <Center
         rotation={[0, 0, rotation]}
@@ -466,8 +478,7 @@ const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
             <Line
               key={i}
               index={i}
-              length={leftLineSprings[i].lineLength}
-              color={leftLineSprings[i].color}
+              {...leftLineSprings[i]}
               direction={Direction.Left}
             />
           ))}
@@ -477,13 +488,20 @@ const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
             <Line
               key={i}
               index={i}
-              length={rightLineSprings[i].lineLength}
-              color={rightLineSprings[i].color}
+              {...rightLineSprings[i]}
               direction={Direction.Right}
             />
           ))}
         </group>
       </Center>
+      <EffectComposer>
+        <Bloom
+          kernelSize={KernelSize.MEDIUM}
+          luminanceThreshold={0}
+          luminanceSmoothing={0.5}
+          intensity={0.5}
+        />
+      </EffectComposer>
     </>
   );
 };
