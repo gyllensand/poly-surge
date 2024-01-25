@@ -55,7 +55,7 @@ const colorTheme = pickRandom([
 const clonedLineLengths = pickRandomBoolean();
 const clonedLineCount = pickRandomBoolean();
 const clonedSimplex = pickRandomBoolean();
-const bgColor = pickRandom(
+export const bgColor = pickRandom(
   colorTheme === Theme.Dark ? DARK_BG_COLORS : LIGHT_BG_COLORS
 );
 
@@ -96,10 +96,10 @@ const longestLine =
     ? { direction: Direction.Left, count: leftLineCount }
     : { direction: Direction.Right, count: rightLineCount };
 
-const primaryColor = pickRandom(
+export const primaryColor = pickRandom(
   colorTheme === Theme.Dark ? DARK_COLORS : LIGHT_COLORS
 );
-const secondaryColor = pickRandom(
+export const secondaryColor = pickRandom(
   colorTheme === Theme.Dark ? DARK_COLORS : LIGHT_COLORS
 );
 const colorSeparator = pickRandomIntFromInterval(
@@ -199,14 +199,6 @@ const getLines = (
 };
 
 declare const $fx: any;
-
-$fx.features({
-  type,
-  colorMode,
-  primaryColor,
-  secondaryColor,
-  bgColor,
-});
 
 const leftSimplex = createNoise2D($fx.rand);
 const leftLines = getLines(
