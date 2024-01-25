@@ -200,7 +200,7 @@ const getLines = (
 
 declare const $fx: any;
 
-$fx.features = () => ({
+$fx.features({
   type,
   colorMode,
   primaryColor,
